@@ -190,36 +190,37 @@ int32 psf_gen(PSX_STATE *psx, int16 *buffer, uint32 samples)
     
     const int samples_per_frame = psx->psf_refresh == 50 ? 882 : 735;
 
-    int samples_into_frame = psx->samples_into_frame;
+    int samples_into_frame_mips = psx->samples_into_frame_mips;
 
 	psx->error_ptr = psx->error_buffer;
 	psx->error_buffer[0] = '\0';
 
 	while (samples)
     {
-        int samples_to_do = samples_per_frame - samples_into_frame;
-        if (samples_to_do > samples)
-            samples_to_do = samples;
+        int samples_to_do_mips = samples_per_frame - samples_into_frame_mips;
+        if (samples_to_do_mips > samples)
+            samples_to_do_mips = samples;
         
-        spu_set_buffer(SPUSTATE, buffer, samples_to_do);
+        spu_set_buffer(SPUSTATE, buffer, samples_to_do_mips);
         
-        for (i = 0; i < samples_to_do; i++)
+        for (i = 0; i < samples_to_do_mips; i++)
         {
             psx_hw_slice(psx);
             spu_advance(SPUSTATE, 1);
         }
 
-        samples_into_frame += samples_to_do;
-        if (samples_into_frame >= samples_per_frame)
-            psx_hw_frame(psx), samples_into_frame = 0;
+        samples_into_frame_mips += samples_to_do_mips;
+        if (samples_into_frame_mips >= samples_per_frame)
+            psx_hw_frame(psx), samples_into_frame_mips = 0;
         
         spu_flush(SPUSTATE);
         
-        samples -= samples_to_do;
-        if (buffer) buffer += samples_to_do * 2;
+        samples -= samples_to_do_mips;
+        if (buffer) buffer += samples_to_do_mips * 2;
     }
     
-    psx->samples_into_frame = samples_into_frame;
+    psx->samples_into_frame_mips = samples_into_frame_mips;
+    psx->samples_into_frame_spu = samples_into_frame_mips;
     
     if (psx->stop)
         return AO_FAIL;

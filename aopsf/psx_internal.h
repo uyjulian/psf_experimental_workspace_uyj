@@ -269,7 +269,8 @@ struct psx_state
   int old_fmt;
 
   uint32 psf_refresh;
-  uint32 samples_into_frame;
+  uint32 samples_into_frame_mips;
+  uint32 samples_into_frame_spu;
 
   MIPS_CPU_CONTEXT mipscpu;
 

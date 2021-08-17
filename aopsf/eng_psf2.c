@@ -421,7 +421,7 @@ int32 psf2_gen(PSX_STATE *psx, int16 *buffer, uint32 samples)
 
 	const int samples_per_frame = psx->psf_refresh == 50 ? 960 : 800;
 
-    int samples_into_frame = psx->samples_into_frame;
+    int samples_into_frame_mips = psx->samples_into_frame_mips;
     
 	psx->error_ptr = psx->error_buffer;
 	psx->error_buffer[0] = '\0';
@@ -430,14 +430,14 @@ int32 psf2_gen(PSX_STATE *psx, int16 *buffer, uint32 samples)
     
     while (samples)
     {
-        int samples_to_do = samples_per_frame - samples_into_frame;
-		int samples_until_vblank = samples_to_do;
-        if (samples_to_do > samples)
-            samples_to_do = samples;
+        int samples_to_do_mips = samples_per_frame - samples_into_frame_mips;
+		int samples_until_vblank_mips = samples_to_do_mips;
+        if (samples_to_do_mips > samples)
+            samples_to_do_mips = samples;
 
-		psx->vblank_samples_until_next = samples_until_vblank;
+		psx->vblank_samples_until_next = samples_until_vblank_mips;
 
-        for (i = 0; i < samples_to_do; i++)
+        for (i = 0; i < samples_to_do_mips; i++)
         {
             spu_advance(SPUSTATE, 1);
             ps2_hw_slice(psx);
@@ -445,17 +445,18 @@ int32 psf2_gen(PSX_STATE *psx, int16 *buffer, uint32 samples)
 				psx->vblank_samples_until_next = samples_per_frame;
         }
         
-        samples_into_frame += samples_to_do;
-        if (samples_into_frame >= samples_per_frame)
-            ps2_hw_frame(psx), samples_into_frame = 0;
+        samples_into_frame_mips += samples_to_do_mips;
+        if (samples_into_frame_mips >= samples_per_frame)
+            ps2_hw_frame(psx), samples_into_frame_mips = 0;
         
-        samples -= samples_to_do;
-        if (buffer) buffer += samples_to_do * 2;
+        samples -= samples_to_do_mips;
+        if (buffer) buffer += samples_to_do_mips * 2;
     }
     
     spu_flush(SPUSTATE);
     
-    psx->samples_into_frame = samples_into_frame;
+    psx->samples_into_frame_mips = samples_into_frame_mips;
+    psx->samples_into_frame_spu = samples_into_frame_mips;
     
     if (psx->stop)
         return AO_FAIL;
