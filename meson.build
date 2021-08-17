@@ -1,5 +1,6 @@
 project('psf_kek', ['c'], default_options: ['optimization=2', 'debug=true', 'warning_level=1'], version: 'unknown')
 
+sdl2_dep = dependency('sdl2', method: 'auto')
 
 zlib_dep = dependency('zlib')
 
@@ -28,7 +29,8 @@ exe_flags = [
 ]
 
 exe_dependencies = [
-	zlib_dep
+	zlib_dep,
+	sdl2_dep,
 ]
 
 executable(

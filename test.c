@@ -6,11 +6,7 @@
 #include "psflib.h"
 #include "psf2fs.h"
 #include "psx_external.h"
-
-#define SAMPLES441 ((44100*2*2)/50)
-#define SAMPLES480 ((48000*2*2)/50)
-
-int16_t audiobuffer[SAMPLES480];
+#include <SDL.h>
 
 void *psx_state = NULL;
 void *psf2fs = NULL;
@@ -152,6 +148,16 @@ bool init(char *name)
 	return TRUE;
 }
 
+void audio_callback(void * arg, Uint8 * stream, int len)
+{
+	int32(*mixChunk)(PSX_STATE *state, int16 *buffer, uint32 count);
+
+	mixChunk = (version == 2) ? psf2_gen : psf_gen;
+	int CHANNELS = 2;
+
+	mixChunk((PSX_STATE *)psx_state, (int16 *)stream, len / CHANNELS / sizeof(int16));
+}
+
 int main(int argc, char *argv[])
 {
 	if (argc < 2)
@@ -164,16 +170,39 @@ int main(int argc, char *argv[])
 
 	if (init(argv[1]))
 	{
-		int32(*mixChunk)(PSX_STATE *state, int16 *buffer, uint32 count);
-
-		mixChunk = (version == 2) ? psf2_gen : psf_gen;
-		int SAMPLES = (version == 2) ? SAMPLES480 : SAMPLES441;
-		int CHANNELS = 2;
-
-		for (;;)
+		if (SDL_Init(SDL_INIT_AUDIO) != 0)
 		{
-			mixChunk((PSX_STATE *)psx_state, audiobuffer, SAMPLES / CHANNELS);
-			fwrite(audiobuffer, SAMPLES, sizeof(int16_t), stdout);
+			SDL_Log("Failed to init audio: %s", SDL_GetError());
+			return 1;
+		}
+
+		SDL_AudioSpec specs;
+		memset(&specs, 0, sizeof(specs));
+		specs.freq = (version == 2) ? 48000 : 44100;
+		specs.format = AUDIO_S16;
+		specs.channels = 2;
+		specs.samples = 4096;
+		specs.callback = audio_callback;
+
+		int dev = SDL_OpenAudioDevice(NULL, 0, &specs, NULL, 0);
+		if (dev == 0)
+		{
+			SDL_Log("Failed to open audio: %s", SDL_GetError());
+			return 1;
+		}
+		else
+		{
+			SDL_PauseAudioDevice(dev, 0); /* start audio playing. */
+			SDL_Event ev;
+			while (SDL_WaitEvent(&ev))
+			{
+				if (ev.type == SDL_QUIT)
+				{
+					break;
+				}
+			}
+			SDL_CloseAudioDevice(dev);
+			return 0;
 		}
 	}
 
