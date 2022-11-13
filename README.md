@@ -13,6 +13,8 @@ Use the PSF component for foobar2000. See https://www.foobar2000.org/components/
 HLE playback with no ROM file needed.  
 However, it does not implement ROM module behavior entirely correctly.  
 
+PSX MIPS CPU module appears to be based off of MAME 0.97 or below.  
+
 https://rbelmont.mameworld.info/?page_id=221
 
 ### Highly Experimental
@@ -21,6 +23,14 @@ LLE playback with ROM file required.
 Can pass in original or trimmed ROM file.  
 
 https://web.archive.org/web/20120701000530/http://www.neillcorlett.com/he
+
+### Sexypsf
+
+HLE playback with no ROM file needed.  
+
+Based on PCSX 1.4 source code.  
+
+http://projects.raphnet.net/#sexypsf
 
 ## Description of programs
 
