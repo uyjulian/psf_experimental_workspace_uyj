@@ -20,6 +20,8 @@
 #include <SDL.h>
 #endif
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #if defined(USING_AUDIO_OVERLOAD)
 PSX_STATE *psx_state = NULL;
@@ -37,6 +39,52 @@ int version = 0;
 
 int16_t audiobuffer[SAMPLES480];
 #endif
+
+int host_dirfd = -1;
+
+static int host_readfile(void *dir_fd, const char *path, int offset, char *buffer, int length)
+{
+	int fd;
+	int ret;
+
+	ret = -1;
+
+	// Skip leading slashes
+	while (*path == '/')
+	{
+		path += 1;
+	}
+
+	if (length == 0)
+	{
+		struct stat path_stat;
+
+		fstatat((int)(intptr_t)dir_fd, path, &path_stat, 0);
+
+		if (S_ISREG(path_stat.st_mode))
+		{
+			return path_stat.st_size;
+		}
+		return -1;
+	}
+
+	fd = openat((int)(intptr_t)dir_fd, path, O_RDONLY, 0644);
+	if (fd < 0)
+	{
+		goto finish;
+	}
+
+	ssize_t read_bytes = pread(fd, buffer, length, offset);
+
+	ret = read_bytes;
+
+finish:
+	if (fd >= 0)
+	{
+		close(fd);
+	}
+	return ret;
+}
 
 typedef struct _psf1_load_state
 {
@@ -225,10 +273,25 @@ bool psf_do_init(const char *name)
 	if (psf_init_and_load_bios("hebios.bin") == false)
 		return false;
 #endif
-	version = psf_load(name, &psf_file_system, 0, 0, 0, 0, 0, 0, 0, 0);
+	struct stat path_stat;
+	int is_dir = 0;
+
+	stat(name, &path_stat);
+	if (S_ISREG(path_stat.st_mode))
+	{
+		version = psf_load(name, &psf_file_system, 0, 0, 0, 0, 0, 0, 0, 0);
+	}
+	else if (S_ISDIR(path_stat.st_mode))
+	{
+		// assume this is a unpacked PSF2
+		version = 2;
+		is_dir = 1;
+	}
 
 	if (version <= 0)
+	{
 		return false;
+	}
 
 	if (version == 1 || version == 2)
 	{
@@ -265,27 +328,49 @@ bool psf_do_init(const char *name)
 		}
 		else if (version == 2)
 		{
-			psf2fs = psf2fs_create();
-			if (psf2fs == NULL)
-				return false;
+			if (is_dir)
+			{
+				int dirfd;
 
-			psf1_load_state state;
+				dirfd = open(name, O_RDONLY | O_DIRECTORY);
+				if (dirfd < 0)
+				{
+					return false;
+				}
 
-			state.refresh = 0;
-
-			if (psf_load(name, &psf_file_system, 2, psf2fs_load_callback, psf2fs, psf1_info, &state, 1, NULL, NULL) < 0)
-				return false;
-
-			if (state.refresh != 0)
-				psx_set_refresh(psx_state, state.refresh);
+				host_dirfd = dirfd;
 
 #if defined(USING_AUDIO_OVERLOAD)
-			psf2_register_readfile(psx_state, psf2fs_virtual_readfile, psf2fs);
+				psf2_register_readfile(psx_state, host_readfile, (void *)(intptr_t)dirfd);
 #endif
 #if defined(USING_HIGHLY_EXPERIMENTAL)
-			psx_set_readfile(psx_state, psf2fs_virtual_readfile, psf2fs);
+				psx_set_readfile(psx_state, host_readfile, (void *)(intptr_t)dirfd);
 #endif
-			
+			}
+			else
+			{
+				psf2fs = psf2fs_create();
+				if (psf2fs == NULL)
+					return false;
+
+				psf1_load_state state;
+
+				state.refresh = 0;
+
+				if (psf_load(name, &psf_file_system, 2, psf2fs_load_callback, psf2fs, psf1_info, &state, 1, NULL, NULL) < 0)
+					return false;
+
+				if (state.refresh != 0)
+					psx_set_refresh(psx_state, state.refresh);
+
+#if defined(USING_AUDIO_OVERLOAD)
+				psf2_register_readfile(psx_state, psf2fs_virtual_readfile, psf2fs);
+#endif
+#if defined(USING_HIGHLY_EXPERIMENTAL)
+				psx_set_readfile(psx_state, psf2fs_virtual_readfile, psf2fs);
+#endif
+			}
+
 
 #if defined(USING_AUDIO_OVERLOAD)
 			psf2_start(psx_state);
@@ -396,8 +481,15 @@ done:
 #endif
 	}
 
+	if (host_dirfd >= 0)
+	{
+		close(host_dirfd);
+		host_dirfd = -1;
+	}
 	if (psf2fs)
+	{
 		psf2fs_delete(psf2fs);
+	}
 	if (psx_state)
 	{
 #if defined(USING_AUDIO_OVERLOAD)
